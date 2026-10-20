@@ -116,4 +116,25 @@ $('run').onclick=async()=>{if(!fileChosen)return;let f=fileChosen;$('run').disab
 $('download').onclick=()=>{let blob=new Blob([$('textout').value],{type:'text/plain;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=(fileChosen?fileChosen.name.replace(/\.[^.]+$/,''):'extracted-text')+'.txt';a.click();URL.revokeObjectURL(url)};$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('textout').value);toast('Text copied to clipboard.')}catch(e){$('textout').select();toast('Text selected. Use Copy from your device menu.')}};$('reset').onclick=()=>{fileChosen=null;$('file').value='';$('chosen').classList.remove('show');$('result').classList.remove('show');$('textout').value='';$('progress').classList.remove('show');toast('Workspace cleared. Choose another file.')};
 
 
-</script></body></html>
+</script>
+<style id="luvkaam-modal-emergency-fix">
+#registerModal{display:none;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center;padding:18px;background:rgba(25,20,45,.62);overflow:auto}
+#registerModal.open{display:flex!important}
+#registerModal .modal{display:block;max-height:90vh;overflow:auto;width:min(100%,520px);background:#fff;border-radius:18px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.25)}
+</style>
+<script id="luvkaam-registration-modal-repair">
+(function(){
+ function setup(){
+  var modal=document.getElementById('registerModal'); if(!modal) return;
+  function show(e){if(e)e.preventDefault();modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';}
+  function hide(){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');document.body.style.overflow='';}
+  ['openRegister','heroRegister'].forEach(function(id){var b=document.getElementById(id);if(b){b.addEventListener('click',show,true);}});
+  var close=document.getElementById('registerClose');if(close)close.addEventListener('click',function(e){e.preventDefault();hide();},true);
+  modal.addEventListener('click',function(e){if(e.target===modal)hide();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&modal.classList.contains('open'))hide();});
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+</script>
+
+</body></html>
