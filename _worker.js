@@ -12,7 +12,7 @@ export default {
     serviceRoleKeyPresent: Boolean(env.SUPABASE_SERVICE_ROLE_KEY)
   }, 503);
 }
-let body; try { body=await request.json(); } catch { return reply({error:"Invalid JSON request."},400); }
+   let body; try { body=await request.json(); } catch { return reply({error:"Invalid JSON request."},400); }
    const name=String(body.name||"").trim(), email=String(body.email||"").trim().toLowerCase(), phone=String(body.phone||"").trim();
    if(name.length<2||name.length>80) return reply({error:"Enter a name between 2 and 80 characters."},400);
    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply({error:"Enter a valid email address."},400);
