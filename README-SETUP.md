@@ -62,3 +62,7 @@ The current homepage's working tools are image OCR (JPG/PNG/WEBP) and extraction
 
 ## SEO content update
 The homepage title, meta description, social share metadata, visible headings and explanatory copy have been improved with natural phrases related to the working tools (image-to-text converter, OCR online, PDF-to-text converter, extract text from PDF) and accurately described planned PDF conversions. Keywords are integrated into readable content rather than added as a keyword list. Planned tools remain labelled as not yet available.
+
+
+## Tool-card interaction fix
+Status badges have been removed from the tool cards and status filters. Selecting Image to Text or PDF to Text now scrolls to the workspace, selects the relevant mode, prompts for registration if needed, and sets the file chooser to the matching file types. This does not make other planned tools operational; each requires its own processing implementation and tests.
