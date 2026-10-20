@@ -5,7 +5,13 @@ export default {
   if (url.pathname === "/api/register" && request.method === "POST") {
    const headers = {"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store",...corsHeaders(request)};
    const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
-   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return reply({error:"Registration service is not configured. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY as Worker secrets."},503);
+   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+  return reply({
+    error: "Missing runtime binding",
+    supabaseUrlPresent: Boolean(env.SUPABASE_URL),
+    serviceRoleKeyPresent: Boolean(env.SUPABASE_SERVICE_ROLE_KEY)
+  }, 503);
+} return reply({error:"Registration service is not configured. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY as Worker secrets."},503);
    let body; try { body=await request.json(); } catch { return reply({error:"Invalid JSON request."},400); }
    const name=String(body.name||"").trim(), email=String(body.email||"").trim().toLowerCase(), phone=String(body.phone||"").trim();
    if(name.length<2||name.length>80) return reply({error:"Enter a name between 2 and 80 characters."},400);
