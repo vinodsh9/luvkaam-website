@@ -27,3 +27,15 @@ Each tool has its own page (e.g. `/merge-pdf`, `/hindi-ocr`). They are generated
 
 ## Hindi OCR
 OCR language data (`assets/ocr/eng.traineddata.gz`, `hin.traineddata.gz`) is served from this site, not a CDN.
+
+## Usage records (for returning-user measurement)
+When a registered person finishes using a tool, the site stores the tool name and date in `tool_events` (never the file). The Privacy Policy and the signup notice say so (version 2026-10-22).
+To erase one person, delete their usage rows first, then the rest:
+```sql
+DELETE FROM tool_events WHERE user_id = (SELECT id FROM users WHERE email = 'person@example.com');
+DELETE FROM consent_log WHERE user_id = (SELECT id FROM users WHERE email = 'person@example.com');
+DELETE FROM users WHERE email = 'person@example.com';
+```
+
+## Page generator
+`node build-pages.js` rebuilds the tool pages, guides (from `content/extras.json`) and the sitemap. The Luvi employee uses it; you can also run it yourself.

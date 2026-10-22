@@ -851,6 +851,7 @@ async function run() {
     if (!(e && e.name === 'UserError')) console.error(e);
     showMsg(friendly(e), 'err');
   }
+  if (state.result && window.Luvkaam && window.Luvkaam.track) window.Luvkaam.track(t.id);
   state.busy = false; setStatus(''); setProgress(null); renderActions(); renderResult();
   var r = $('wkResult'); if (r && state.result) r.scrollIntoView({ block: 'nearest' });
 }

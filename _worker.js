@@ -1,10 +1,10 @@
 // Luvkaam backend. One self-contained Cloudflare Worker (also valid as a Pages "_worker.js").
-// Routes: POST /api/register, POST /api/optout, POST /api/request. Everything else is the static site.
+// Routes: POST /api/register, /api/optout, /api/request, /api/event. Everything else is the static site.
 // Needs one D1 database bound as "DB". Tables are created automatically on first use.
 
 // Must match CONSENT_VERSION in assets/register.js. Change both whenever the wording of the
 // registration notice or the privacy policy changes in a way that affects what people agree to.
-const CONSENT_VERSION = '2026-10-20';
+const CONSENT_VERSION = '2026-10-22';
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -37,6 +37,16 @@ const SCHEMA = [
     closed_at TEXT
   )`,
   'CREATE INDEX IF NOT EXISTS idx_privacy_requests_status ON privacy_requests(status)',
+  // One row per person, tool and day. Only the tool name and the date are kept, never the file.
+  `CREATE TABLE IF NOT EXISTS tool_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    tool TEXT NOT NULL,
+    day TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (user_id, tool, day)
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_tool_events_user_day ON tool_events(user_id, day)',
 ];
 
 let schemaReady = null;
@@ -200,8 +210,28 @@ async function privacyRequest(request, env) {
   }
 }
 
+/* ---------- POST /api/event ---------- */
+// Records that a registered person finished using a tool today. Used to tell returning users from
+// one-time users. Always answers ok, so it never reveals whether an email is registered.
+const TOOL_IDS = ['image', 'pdf', 'merge', 'compress', 'word', 'scan', 'imagepdf', 'office', 'split', 'rotate', 'protect', 'unlock', 'excel', 'sign', 'jpg', 'summarize'];
+async function toolEvent(request, env) {
+  const early = preflight(request, env); if (early) return early;
+  let body;
+  try { body = await readJson(request, 1024); } catch (e) { return json({ error: e.message }, 400); }
+  const email = cleanEmail(body.email), tool = String(body.tool || '');
+  if (!email || !TOOL_IDS.includes(tool)) return json({ ok: true });
+  const now = new Date().toISOString();
+  try {
+    await ensureSchema(env.DB);
+    await env.DB.prepare(
+      'INSERT OR IGNORE INTO tool_events (user_id, tool, day, created_at) SELECT id, ?, ?, ? FROM users WHERE email = ?'
+    ).bind(tool, now.slice(0, 10), now, email).run();
+  } catch (e) { console.error('event failed', e && e.message); }
+  return json({ ok: true });
+}
+
 /* ---------- router ---------- */
-const ROUTES = { '/api/register': register, '/api/optout': optout, '/api/request': privacyRequest };
+const ROUTES = { '/api/register': register, '/api/optout': optout, '/api/request': privacyRequest, '/api/event': toolEvent };
 
 export default {
   async fetch(request, env) {

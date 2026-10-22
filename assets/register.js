@@ -3,7 +3,7 @@
 'use strict';
 
 // Must match CONSENT_VERSION in functions/api/_util.js. Change both whenever the notice wording changes.
-var CONSENT_VERSION = '2026-10-20';
+var CONSENT_VERSION = '2026-10-22';
 // Promotional consent is optional by default. Indian data protection law expects consent to be
 // specific and not bundled with access to the service. Set to true only if you have taken legal advice.
 var PROMO_REQUIRED = false;
@@ -94,7 +94,7 @@ async function submit(e) {
     var data = {};
     try { data = await r.json(); } catch (err) { /* keep empty */ }
     if (!r.ok || !data.ok) throw new Error(data.error || 'Registration failed. Please try again.');
-    writeFlag({ v: 1, name: name, at: new Date().toISOString(), consent: CONSENT_VERSION });
+    writeFlag({ v: 1, name: name, e: email, at: new Date().toISOString(), consent: CONSENT_VERSION });
     m.className = 'modalnote ok';
     m.textContent = data.existing ? 'Welcome back. This browser now has access. Your saved choices were not changed.' : 'You are registered. All tools are unlocked on this browser.';
     refreshNav(); toast('You are registered. All tools are unlocked.');
@@ -135,6 +135,14 @@ function init() {
   refreshNav();
 }
 
-window.Luvkaam = { isRegistered: isRegistered, requireRegistration: requireRegistration, openRegister: openRegister, toast: toast, CONSENT_VERSION: CONSENT_VERSION };
+// Tells Luvkaam which tool a registered person used today (tool name only, never the file).
+function track(toolId) {
+  try {
+    var f = readFlag(); if (!f || f.v !== 1 || !f.e) return;
+    fetch('/api/event', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: f.e, tool: toolId }) }).catch(function () {});
+  } catch (e) { /* tracking must never break a tool */ }
+}
+
+window.Luvkaam = { track: track, isRegistered: isRegistered, requireRegistration: requireRegistration, openRegister: openRegister, toast: toast, CONSENT_VERSION: CONSENT_VERSION };
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
