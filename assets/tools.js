@@ -13,7 +13,7 @@ var URLS = {
   tess: CDN + 'tesseract.js@5.1.1/dist/tesseract.min.js',
   tessWorker: CDN + 'tesseract.js@5.1.1/dist/worker.min.js',
   tessCore: CDN + 'tesseract.js-core@5.1.0',
-  tessLang: CDN + '@tesseract.js-data/eng@1.0.0/4.0.0_best_int',
+  tessLang: '/assets/ocr',   // eng.traineddata.gz and hin.traineddata.gz are served from this site
   qpdf: CDN + '@neslinesli93/qpdf-wasm@0.3.0/dist/qpdf.js',
   qpdfWasm: CDN + '@neslinesli93/qpdf-wasm@0.3.0/dist/qpdf.wasm'
 };
@@ -246,9 +246,9 @@ async function decodeImage(file, opaque) {
 }
 
 /* ---------- OCR ---------- */
-async function makeOcrWorker(progress) {
+async function makeOcrWorker(progress, lang) {
   var T = await lib.tess();
-  return T.createWorker('eng', 1, {
+  return T.createWorker(lang === 'hin' || lang === 'eng+hin' ? lang : 'eng', 1, {
     workerPath: URLS.tessWorker, corePath: URLS.tessCore, langPath: URLS.tessLang,
     logger: function (m) { if (progress && m.status === 'recognizing text') progress(m.progress || 0); }
   });
@@ -322,11 +322,13 @@ var PAGE_OPT = { key: 'pages', type: 'text', label: 'Pages', placeholder: 'e.g. 
 
 var TOOLS = [
   { id: 'image', name: 'Image to text', cats: 'image text', icon: '▧', tone: 'lilac', kind: 'image', multi: false, cta: 'Extract text',
-    blurb: 'Turn a clear photo or screenshot into editable text with OCR (English).',
-    card: 'Turn a clear photo into editable text with OCR.',
+    blurb: 'Turn a clear photo or screenshot into editable text with OCR (English and Hindi).',
+    card: 'Turn a clear photo into editable text with OCR, in English or Hindi.',
+    defaults: { lang: 'eng' },
+    options: [{ key: 'lang', type: 'select', label: 'Language in the picture', choices: [['eng', 'English'], ['hin', 'Hindi (हिन्दी)'], ['eng+hin', 'Hindi and English mixed']], help: 'Pick the language that is printed on the page. Hindi needs a clear, well lit image.' }],
     run: async function (c) {
-      c.status('Loading text recognition. The first run downloads about 3 MB.'); c.progress(0.05);
-      var worker = await makeOcrWorker(function (p) { c.progress(0.15 + p * 0.8); c.status('Recognising text… ' + Math.round(p * 100) + '%'); });
+      c.status('Loading text recognition. The first run downloads a few MB.'); c.progress(0.05);
+      var worker = await makeOcrWorker(function (p) { c.progress(0.15 + p * 0.8); c.status('Recognising text… ' + Math.round(p * 100) + '%'); }, c.opts.lang);
       try {
         var r = await worker.recognize(c.files[0].file);
         var text = (r.data.text || '').trim();
@@ -406,13 +408,15 @@ var TOOLS = [
     } },
 
   { id: 'scan', name: 'OCR scanned PDF', cats: 'pdf text', icon: '⌗', tone: 'lilac', kind: 'pdf', multi: false, cta: 'Read scanned pages',
-    blurb: 'Recognise text on scanned PDF pages (English, up to ' + OCR_MAX_PAGES + ' pages at a time).',
-    card: 'Recognise text on scanned PDF pages.',
+    blurb: 'Recognise text on scanned PDF pages (English and Hindi, up to ' + OCR_MAX_PAGES + ' pages at a time).',
+    card: 'Recognise text on scanned PDF pages, in English or Hindi.',
+    defaults: { lang: 'eng' },
+    options: [{ key: 'lang', type: 'select', label: 'Language in the picture', choices: [['eng', 'English'], ['hin', 'Hindi (हिन्दी)'], ['eng+hin', 'Hindi and English mixed']], help: 'Pick the language that is printed on the page. Hindi needs a clear, well lit image.' }],
     run: async function (c) {
       var f = c.files[0], pdf = await openPdf(f.bytes), n = Math.min(pdf.numPages, OCR_MAX_PAGES), parts = [], p, page, r;
-      c.status('Loading text recognition. The first run downloads about 3 MB.');
+      c.status('Loading text recognition. The first run downloads a few MB.');
       var base = 0;
-      var worker = await makeOcrWorker(function (pr) { c.progress(0.05 + ((base + pr) / n) * 0.92); });
+      var worker = await makeOcrWorker(function (pr) { c.progress(0.05 + ((base + pr) / n) * 0.92); }, c.opts.lang);
       try {
         for (p = 1; p <= n; p++) {
           base = p - 1; c.status('Reading page ' + p + ' of ' + n + '…');
@@ -985,7 +989,10 @@ function init() {
       document.querySelectorAll('.tool').forEach(function (c) { c.style.display = (f === 'all' || c.getAttribute('data-cats').split(' ').indexOf(f) >= 0) ? 'flex' : 'none'; });
     });
   });
-  setTool('image');
+  var pg = document.body.getAttribute('data-tool-page') || 'image';
+  setTool(toolById(pg) ? pg : 'image');
+  var dl = document.body.getAttribute('data-lang');
+  if (dl && state.tool.options && /^(eng|hin|eng\+hin)$/.test(dl)) { state.opts.lang = dl; renderOptions(); }
 }
 window.LuvkaamTools = { openTool: openTool, list: TOOLS, _lib: lib, _internals: { summarize: summarize, rowsToParagraphs: rowsToParagraphs, groupLines: groupLines, rowCells: rowCells } };
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

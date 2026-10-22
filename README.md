@@ -21,3 +21,9 @@ Promotional messages: only to rows where `consent_promo = 1`.
 
 ## Before going live
 Fill the `todo` placeholders in `privacy.html` and `terms.html` (business name, address, grievance officer).
+
+## Tool pages
+Each tool has its own page (e.g. `/merge-pdf`, `/hindi-ocr`). They are generated from `index.html` by `build-pages.js` in the source package; edit the generator, not the pages.
+
+## Hindi OCR
+OCR language data (`assets/ocr/eng.traineddata.gz`, `hin.traineddata.gz`) is served from this site, not a CDN.
