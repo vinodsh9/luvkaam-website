@@ -1,0 +1,7 @@
+_worker.js
+_routes.json
+wrangler.toml
+package.json
+package-lock.json
+README.md
+node_modules

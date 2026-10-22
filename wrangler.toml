@@ -1,8 +1,16 @@
 name = "luvkaam-website"
-compatibility_date = "2026-10-20"
 main = "_worker.js"
+compatibility_date = "2026-10-20"
 
 [assets]
 directory = "."
 binding = "ASSETS"
 run_worker_first = true
+
+# Registration database. Wrangler 4.45 or newer creates it automatically on the first deploy.
+# If your deploy says it needs a database_id, create the database in the Cloudflare dashboard
+# (Storage & Databases > D1 > Create, name it luvkaam-db) and add the line:
+#   database_id = "paste-the-id-here"
+[[d1_databases]]
+binding = "DB"
+database_name = "luvkaam-db"
