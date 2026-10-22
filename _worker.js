@@ -1,240 +1,217 @@
+// Luvkaam backend. One self-contained Cloudflare Worker (also valid as a Pages "_worker.js").
+// Routes: POST /api/register, POST /api/optout, POST /api/request. Everything else is the static site.
+// Needs one D1 database bound as "DB". Tables are created automatically on first use.
+
+// Must match CONSENT_VERSION in assets/register.js. Change both whenever the wording of the
+// registration notice or the privacy policy changes in a way that affects what people agree to.
+const CONSENT_VERSION = '2026-10-20';
+
+const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    phone TEXT NOT NULL,
+    accepted_terms INTEGER NOT NULL DEFAULT 0,
+    consent_promo INTEGER NOT NULL DEFAULT 0,
+    consent_version TEXT NOT NULL,
+    consent_at TEXT NOT NULL,
+    promo_changed_at TEXT,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS consent_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    event TEXT NOT NULL,
+    consent_version TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_consent_log_user ON consent_log(user_id)',
+  `CREATE TABLE IF NOT EXISTS privacy_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    type TEXT NOT NULL,
+    message TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TEXT NOT NULL,
+    closed_at TEXT
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_privacy_requests_status ON privacy_requests(status)',
+];
+
+let schemaReady = null;
+function ensureSchema(db) {
+  if (!schemaReady) {
+    schemaReady = db.batch(SCHEMA.map((sql) => db.prepare(sql))).catch((e) => { schemaReady = null; throw e; });
+  }
+  return schemaReady;
+}
+
+/* ---------- helpers ---------- */
+function json(body, status = 200, headers = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers },
+  });
+}
+function checkOrigin(request) {
+  const origin = request.headers.get('origin');
+  if (!origin) return true;
+  try { return new URL(origin).host === new URL(request.url).host; } catch (e) { return false; }
+}
+async function readJson(request, maxBytes = 4096) {
+  const type = request.headers.get('content-type') || '';
+  if (!type.toLowerCase().includes('application/json')) throw new Error('Send the request as JSON.');
+  const text = await request.text();
+  if (text.length > maxBytes) throw new Error('The request is too large.');
+  try {
+    const value = JSON.parse(text);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('bad');
+    return value;
+  } catch (e) { throw new Error('The request could not be read.'); }
+}
+function cleanName(value) {
+  const s = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+  if (s.length < 2 || s.length > 80) return null;
+  if (/[<>\u0000-\u001f\u007f]/.test(s)) return null;
+  return s;
+}
+function cleanEmail(value) {
+  const s = String(value == null ? '' : value).trim().toLowerCase();
+  if (s.length < 5 || s.length > 254) return null;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s) ? s : null;
+}
+// Returns a normalised phone number such as +919876543210, or null.
+// A 10 digit number starting 6-9 is treated as an Indian mobile number.
+function cleanPhone(value) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!/^[+0-9()\s.-]{8,25}$/.test(raw)) return null;
+  let digits = raw.replace(/\D/g, '');
+  if (!raw.startsWith('+')) {
+    if (digits.length === 10 && /^[6-9]/.test(digits)) digits = '91' + digits;
+    else if (digits.length === 11 && digits[0] === '0') digits = '91' + digits.slice(1);
+  }
+  if (digits.length < 8 || digits.length > 15) return null;
+  return '+' + digits;
+}
+function cleanText(value, max) {
+  return String(value == null ? '' : value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, max);
+}
+function preflight(request, env) {
+  if (!checkOrigin(request)) return json({ error: 'This request is not allowed.' }, 403);
+  if (!env.DB) {
+    console.error('The D1 binding "DB" is missing. See README.md.');
+    return json({ error: 'Registration is temporarily unavailable. Please try again later.' }, 503);
+  }
+  return null;
+}
+
+/* ---------- POST /api/register ---------- */
+async function register(request, env) {
+  const early = preflight(request, env); if (early) return early;
+  let body;
+  try { body = await readJson(request); } catch (e) { return json({ error: e.message }, 400); }
+
+  // Hidden field that people never see. Bots fill it in. Pretend it worked and store nothing.
+  if (typeof body.website === 'string' && body.website.trim() !== '') return json({ ok: true });
+
+  const name = cleanName(body.name), email = cleanEmail(body.email), phone = cleanPhone(body.phone);
+  if (!name) return json({ error: 'Enter your full name (2 to 80 characters).' }, 400);
+  if (!email) return json({ error: 'Enter a valid email address.' }, 400);
+  if (!phone) return json({ error: 'Enter a valid phone number, with the country code if it is not an Indian number.' }, 400);
+  if (body.acceptTerms !== true || body.confirmAge !== true) {
+    return json({ error: 'Please confirm you are 18 or older and accept the Terms of Use and Privacy Policy.' }, 400);
+  }
+  if (body.consentVersion !== CONSENT_VERSION) {
+    return json({ error: 'The registration notice was updated. Please reload the page and try again.' }, 409);
+  }
+  const promo = body.promo === true ? 1 : 0;
+  const now = new Date().toISOString();
+
+  try {
+    await ensureSchema(env.DB);
+    const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    // Someone who is already registered just gets access again. Their saved consent is not changed here.
+    if (existing) return json({ ok: true, existing: true });
+
+    const log = (event) => env.DB.prepare(
+      'INSERT INTO consent_log (user_id, event, consent_version, created_at) VALUES ((SELECT id FROM users WHERE email = ?), ?, ?, ?)'
+    ).bind(email, event, CONSENT_VERSION, now);
+    await env.DB.batch([
+      env.DB.prepare(
+        'INSERT INTO users (name, email, phone, accepted_terms, consent_promo, consent_version, consent_at, promo_changed_at, created_at) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)'
+      ).bind(name, email, phone, promo, CONSENT_VERSION, now, promo ? now : null, now),
+      log('register'),
+      ...(promo ? [log('promo_opt_in')] : []),
+    ]);
+    return json({ ok: true, existing: false });
+  } catch (e) {
+    if (String(e && e.message).includes('UNIQUE')) return json({ ok: true, existing: true });
+    console.error('register failed', e && e.message);
+    return json({ error: 'We could not save your registration. Please try again.' }, 500);
+  }
+}
+
+/* ---------- POST /api/optout ---------- */
+// Withdraws consent for promotional messages. Always answers the same way, so the response
+// never reveals whether an email address is registered.
+async function optout(request, env) {
+  const early = preflight(request, env); if (early) return early;
+  let body;
+  try { body = await readJson(request); } catch (e) { return json({ error: e.message }, 400); }
+  if (typeof body.website === 'string' && body.website.trim() !== '') return json({ ok: true });
+  const email = cleanEmail(body.email);
+  if (!email) return json({ error: 'Enter a valid email address.' }, 400);
+  const now = new Date().toISOString();
+  try {
+    await ensureSchema(env.DB);
+    const res = await env.DB.prepare('UPDATE users SET consent_promo = 0, promo_changed_at = ? WHERE email = ? AND consent_promo = 1').bind(now, email).run();
+    if (res && res.meta && res.meta.changes > 0) {
+      await env.DB.prepare(
+        'INSERT INTO consent_log (user_id, event, consent_version, created_at) VALUES ((SELECT id FROM users WHERE email = ?), ?, ?, ?)'
+      ).bind(email, 'promo_opt_out', CONSENT_VERSION, now).run();
+    }
+    return json({ ok: true });
+  } catch (e) {
+    console.error('optout failed', e && e.message);
+    return json({ error: 'We could not process this. Please try again or email us.' }, 500);
+  }
+}
+
+/* ---------- POST /api/request ---------- */
+const REQUEST_TYPES = ['access', 'correction', 'erasure', 'grievance'];
+async function privacyRequest(request, env) {
+  const early = preflight(request, env); if (early) return early;
+  let body;
+  try { body = await readJson(request, 6000); } catch (e) { return json({ error: e.message }, 400); }
+  if (typeof body.website === 'string' && body.website.trim() !== '') return json({ ok: true });
+  const email = cleanEmail(body.email), type = String(body.type || ''), message = cleanText(body.message, 1500);
+  if (!email) return json({ error: 'Enter a valid email address.' }, 400);
+  if (!REQUEST_TYPES.includes(type)) return json({ error: 'Choose the kind of request.' }, 400);
+  if (type !== 'access' && type !== 'erasure' && message.length < 5) return json({ error: 'Add a short description of your request.' }, 400);
+  try {
+    await ensureSchema(env.DB);
+    await env.DB.prepare("INSERT INTO privacy_requests (email, type, message, status, created_at) VALUES (?, ?, ?, 'open', ?)")
+      .bind(email, type, message || null, new Date().toISOString()).run();
+    return json({ ok: true });
+  } catch (e) {
+    console.error('request failed', e && e.message);
+    return json({ error: 'We could not save your request. Please try again or email us.' }, 500);
+  }
+}
+
+/* ---------- router ---------- */
+const ROUTES = { '/api/register': register, '/api/optout': optout, '/api/request': privacyRequest };
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
-
-    // Handle browser preflight requests.
-    if (
-      url.pathname === "/api/register" &&
-      request.method === "OPTIONS"
-    ) {
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders(request)
-      });
+    const { pathname } = new URL(request.url);
+    const handler = ROUTES[pathname];
+    if (handler) {
+      if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405, { allow: 'POST' });
+      return handler(request, env);
     }
-
-    if (
-      url.pathname === "/api/register" &&
-      request.method === "POST"
-    ) {
-      const headers = {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "no-store",
-        ...corsHeaders(request)
-      };
-
-      const reply = (body, status = 200) =>
-        new Response(JSON.stringify(body), { status, headers });
-
-      // Verify Cloudflare runtime configuration.
-      if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-        return reply({
-          error: "Missing runtime binding",
-          supabaseUrlPresent: Boolean(env.SUPABASE_URL),
-          serviceRoleKeyPresent: Boolean(
-            env.SUPABASE_SERVICE_ROLE_KEY
-          )
-        }, 503);
-      }
-
-      // Parse registration form.
-      let body;
-
-      try {
-        body = await request.json();
-      } catch {
-        return reply({ error: "Invalid JSON request." }, 400);
-      }
-
-      const name = String(body.name || "").trim();
-      const email = String(body.email || "").trim().toLowerCase();
-      const phone = String(body.phone || "").trim();
-
-      if (name.length < 2 || name.length > 80) {
-        return reply({
-          error: "Enter a name between 2 and 80 characters."
-        }, 400);
-      }
-
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return reply({
-          error: "Enter a valid email address."
-        }, 400);
-      }
-
-      if (!/^[+0-9() .-]{8,20}$/.test(phone)) {
-        return reply({
-          error: "Enter a valid phone number."
-        }, 400);
-      }
-
-      if (body.privacyConsent !== true) {
-        return reply({
-          error: "Privacy and terms acknowledgement is required."
-        }, 400);
-      }
-
-      const now = new Date().toISOString();
-      const version = String(
-        body.consentVersion || "2026-10-20-v1"
-      );
-
-      const base = env.SUPABASE_URL.replace(/\/$/, "");
-      const key = env.SUPABASE_SERVICE_ROLE_KEY;
-
-      const supabaseHeaders = {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json"
-      };
-
-      try {
-        // Create/invite the Supabase Auth user.
-        const invite = await fetch(
-          `${base}/auth/v1/invite`,
-          {
-            method: "POST",
-            headers: supabaseHeaders,
-            body: JSON.stringify({
-              email,
-              data: {
-                full_name: name,
-                phone
-              }
-            })
-          }
-        );
-
-        let authData = {};
-
-        try {
-          authData = await invite.json();
-        } catch {
-          // The response may not contain JSON.
-        }
-
-        if (!invite.ok) {
-          // Do not assume an existing account was successfully
-          // registered or that an invitation was sent.
-          return reply({
-            error:
-              authData.msg ||
-              authData.message ||
-              authData.error_description ||
-              "Supabase could not create the invitation. Check Auth settings and logs."
-          }, invite.status === 429 ? 429 : 502);
-        }
-
-        const userId = authData.id || authData.user?.id;
-
-        if (!userId) {
-          return reply({
-            error: "Supabase did not return a user ID. Check Auth logs."
-          }, 502);
-        }
-
-        // Save/update the user profile.
-        const profile = await fetch(
-          `${base}/rest/v1/profiles`,
-          {
-            method: "POST",
-            headers: {
-              ...supabaseHeaders,
-              Prefer: "resolution=merge-duplicates,return=minimal"
-            },
-            body: JSON.stringify({
-              id: userId,
-              full_name: name,
-              email,
-              phone,
-              created_at: now
-            })
-          }
-        );
-
-        if (!profile.ok) {
-          const detail = await profile.text();
-
-          console.error("Luvkaam profile save failed", {
-            status: profile.status,
-            detail
-          });
-
-          return reply({
-            error: "Account invitation was processed, but profile storage failed. Check the profiles table and Supabase logs."
-          }, 502);
-        }
-
-        // Consent types must match schema.sql exactly.
-        const consents = [
-          {
-            user_id: userId,
-            consent_type: "privacy_notice_acknowledgement",
-            granted: true,
-            consent_version: version,
-            source: "website_registration",
-            captured_at: now
-          },
-          {
-            user_id: userId,
-            consent_type: "promotional_communications",
-            granted: body.marketingConsent === true,
-            consent_version: version,
-            source: "website_registration",
-            captured_at: now
-          }
-        ];
-
-        const consentResponse = await fetch(
-          `${base}/rest/v1/consent_events`,
-          {
-            method: "POST",
-            headers: {
-              ...supabaseHeaders,
-              Prefer: "return=minimal"
-            },
-            body: JSON.stringify(consents)
-          }
-        );
-
-        if (!consentResponse.ok) {
-          const detail = await consentResponse.text();
-
-          console.error("Luvkaam consent save failed", {
-            status: consentResponse.status,
-            detail
-          });
-
-          return reply({
-            error: "Account and profile were processed, but consent storage failed. Check the consent_events table and Supabase logs."
-          }, 502);
-        }
-
-        return reply({
-          message: "Registration request saved. Check your email for the invitation or verification link."
-        }, 201);
-
-      } catch (error) {
-        console.error("Luvkaam registration request failed", {
-          message: String(error)
-        });
-
-        return reply({
-          error: "Registration service could not complete the request. Check Worker logs."
-        }, 502);
-      }
-    }
-
-    // Serve the static website for other paths.
+    if (pathname.startsWith('/api/')) return json({ error: 'Not found.' }, 404);
     return env.ASSETS.fetch(request);
-  }
+  },
 };
-
-function corsHeaders(request) {
-  return {
-    "Access-Control-Allow-Origin": new URL(request.url).origin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
-}
