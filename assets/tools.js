@@ -710,7 +710,7 @@ function renderPanelBody() {
   if (t.kind !== 'none') {
     var accept = t.kind === 'pdf' ? ACCEPT_PDF : ACCEPT_IMG;
     input = h('input', { id: 'wkFile', type: 'file', hidden: true, accept: accept, multiple: !!t.multi, onchange: function (e) { addFiles(e.target.files); e.target.value = ''; } });
-    var pick = h('button', { class: 'btn softbtn', id: 'pick', type: 'button', onclick: function () { if (window.Luvkaam.requireRegistration()) input.click(); } },
+    var pick = h('button', { class: 'btn softbtn', id: 'pick', type: 'button', onclick: function () { if (window.Luvkaam.requireAccess(t.id)) input.click(); } },
       t.multi ? 'Choose files' : 'Choose file');
     drop = h('div', { class: 'wk-drop', id: 'dropzone' },
       h('div', { class: 'glyph', 'aria-hidden': 'true' }, '⇧'),
@@ -719,7 +719,7 @@ function renderPanelBody() {
       pick, input);
     ['dragenter', 'dragover'].forEach(function (n) { drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
     ['dragleave', 'drop'].forEach(function (n) { drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
-    drop.addEventListener('drop', function (e) { if (window.Luvkaam.requireRegistration()) addFiles(e.dataTransfer.files); });
+    drop.addEventListener('drop', function (e) { if (window.Luvkaam.requireAccess(t.id)) addFiles(e.dataTransfer.files); });
   }
   body.replaceChildren.apply(body, [
     drop,
@@ -728,11 +728,25 @@ function renderPanelBody() {
     h('div', { id: 'wkOpts' }),
     h('div', { id: 'wkCustom' }),
     h('div', { id: 'wkMsg', role: 'status', 'aria-live': 'polite' }),
+    h('div', { id: 'wkFree', class: 'wk-free' }),
     h('div', { class: 'wk-actions', id: 'wkActions' }),
     h('div', { id: 'wkStatus', class: 'wk-status', 'aria-live': 'polite' }),
     h('div', { id: 'wkResult' })].filter(Boolean));
-  renderFiles(); renderText(); renderOptions(); renderCustom(); renderActions(); renderResult();
+  renderFiles(); renderText(); renderOptions(); renderCustom(); renderActions(); renderResult(); renderFree();
 }
+
+function renderFree() {
+  var box = $('wkFree'); if (!box || !state.tool || !window.Luvkaam) return;
+  var L = window.Luvkaam, id = state.tool.id, msg = '';
+  if (!L.isRegistered()) {
+    if (L.isFreeTool(id)) {
+      var n = L.freeLeft();
+      msg = n > 0 ? 'You can use this tool ' + n + (n === 1 ? ' more time' : ' more times') + ' today without registering. Register free for all 16 tools and no daily limit.' : 'You have used your ' + L.FREE_PER_DAY + ' free tries for today. Register free to keep going.';
+    } else { msg = 'This tool needs a free registration. It takes under a minute.'; }
+  }
+  box.textContent = msg; box.hidden = !msg;
+}
+window.addEventListener('luvkaam:access', function () { renderFree(); });
 
 function showMsg(text, kind) {
   var m = $('wkMsg'); if (!m) return; m.replaceChildren();
@@ -842,8 +856,8 @@ function renderActions() {
 }
 async function run() {
   if (state.busy || !canRun()) return;
-  if (!window.Luvkaam.requireRegistration()) return;
   var t = state.tool;
+  if (!window.Luvkaam.requireAccess(t.id)) return;
   showMsg(''); setStatus(''); state.busy = true; state.result = null; renderActions(); renderResult();
   try {
     state.result = await t.run({ files: state.files.slice(), opts: Object.assign({}, state.opts), progress: setProgress, status: setStatus, sign: state.sign });
@@ -851,8 +865,11 @@ async function run() {
     if (!(e && e.name === 'UserError')) console.error(e);
     showMsg(friendly(e), 'err');
   }
-  if (state.result && window.Luvkaam && window.Luvkaam.track) window.Luvkaam.track(t.id);
-  state.busy = false; setStatus(''); setProgress(null); renderActions(); renderResult();
+  if (state.result && window.Luvkaam) {
+    if (window.Luvkaam.isRegistered()) { if (window.Luvkaam.track) window.Luvkaam.track(t.id); }
+    else if (window.Luvkaam.isFreeTool(t.id) && state.result.kind !== 'nochange') window.Luvkaam.useFree();
+  }
+  state.busy = false; setStatus(''); setProgress(null); renderActions(); renderResult(); renderFree();
   var r = $('wkResult'); if (r && state.result) r.scrollIntoView({ block: 'nearest' });
 }
 

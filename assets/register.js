@@ -32,6 +32,7 @@ var modal, lastFocus = null, pendingResume = null;
 function isRegistered() { var f = readFlag(); return !!(f && f.v === 1); }
 
 function refreshNav() {
+  try { window.dispatchEvent(new Event('luvkaam:access')); } catch (e) { /* old browser */ }
   var f = readFlag(), reg = isRegistered();
   ['openRegister', 'heroRegister', 'ctaRegister'].forEach(function (id) {
     var b = $(id); if (!b) return;
@@ -58,6 +59,29 @@ function closeRegister() {
   if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
 }
 
+/* Free tries: a few tools can be used without registering, up to FREE_PER_DAY times a day on this browser. */
+var FREE_TOOLS = ['image', 'merge', 'compress', 'imagepdf'];
+var FREE_PER_DAY = 3, FREE_KEY = 'luvkaam.free', freeMemory = null;
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+function freeState() {
+  var v = null;
+  try { v = JSON.parse(localStorage.getItem(FREE_KEY) || 'null'); } catch (e) { v = freeMemory; }
+  if (!v || v.d !== todayKey()) v = { d: todayKey(), n: 0 };
+  return v;
+}
+function isFreeTool(id) { return FREE_TOOLS.indexOf(id) >= 0; }
+function freeLeft() { return Math.max(0, FREE_PER_DAY - freeState().n); }
+function useFree() {
+  var v = freeState(); v.n += 1; freeMemory = v;
+  try { localStorage.setItem(FREE_KEY, JSON.stringify(v)); } catch (e) { /* keep in memory */ }
+}
+function canUse(toolId) { return isRegistered() || (isFreeTool(toolId) && freeLeft() > 0); }
+function requireAccess(toolId) {
+  if (canUse(toolId)) return true;
+  openRegister();
+  toast(isFreeTool(toolId) ? 'You have used your ' + FREE_PER_DAY + ' free tries for today. Register free to keep going.' : 'This tool needs a free registration.');
+  return false;
+}
 function requireRegistration() {
   if (isRegistered()) return true;
   openRegister();
@@ -143,6 +167,6 @@ function track(toolId) {
   } catch (e) { /* tracking must never break a tool */ }
 }
 
-window.Luvkaam = { track: track, isRegistered: isRegistered, requireRegistration: requireRegistration, openRegister: openRegister, toast: toast, CONSENT_VERSION: CONSENT_VERSION };
+window.Luvkaam = { requireAccess: requireAccess, canUse: canUse, isFreeTool: isFreeTool, freeLeft: freeLeft, useFree: useFree, FREE_PER_DAY: FREE_PER_DAY, track: track, isRegistered: isRegistered, requireRegistration: requireRegistration, openRegister: openRegister, toast: toast, CONSENT_VERSION: CONSENT_VERSION };
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

@@ -100,6 +100,22 @@ let EXTRAS = { faqs: {}, guides: [] };
 try { EXTRAS = Object.assign(EXTRAS, JSON.parse(fs.readFileSync(path.join(SITE, 'content', 'extras.json'), 'utf8'))); } catch (e) { /* none yet */ }
 for (const t of T) { const more = (EXTRAS.faqs || {})[t.slug]; if (more && more.length) t.faq = t.faq.concat(more.filter((f) => !t.faq.some((x) => x[0] === f[0]))); }
 
+// Hand-written guides live in content/guides/*.html: a few "key: value" lines, a blank line, then the article body.
+function readGuides() {
+  const dir = path.join(SITE, 'content', 'guides');
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter((f) => f.endsWith('.html')).sort().map((f) => {
+    const raw = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\r/g, '');
+    const cut = raw.indexOf('\n\n'), head = raw.slice(0, cut), g = { slug: f.replace(/\.html$/, ''), body: raw.slice(cut + 2) };
+    head.split('\n').forEach((l) => { const m = l.match(/^(\w+):\s*(.*)$/); if (m) g[m[1]] = m[2].trim(); });
+    g.tools = (g.tools || '').split(',').map((s) => s.trim()).filter(Boolean);
+    return g;
+  });
+}
+let TOOLX = {};
+try { TOOLX = JSON.parse(fs.readFileSync(path.join(SITE, 'content', 'tool-extras.json'), 'utf8')); } catch (e) { /* optional */ }
+const FREE_SLUGS = ['merge-pdf', 'compress-pdf', 'jpg-to-pdf', 'image-to-text', 'hindi-ocr'];
+
 const dropFrom = (s, a) => s.slice(s.indexOf(a));
 const footer = dropFrom(index, '<div class="shell"><footer>').replace(/<\/body>[\s\S]*$/, '');
 const modalAndScripts = footer.slice(footer.indexOf('<div class="toast"'));
@@ -108,6 +124,7 @@ const footerHtml = footer.slice(0, footer.indexOf('<div class="toast"'))
 const esc = (s) => s.replace(/&(?!amp;)/g, '&amp;');
 const links = T.map((t) => `<a class="inl" href="/${t.slug}">${esc(t.name)}</a>`).join(' · ');
 
+const ALL_GUIDES = readGuides().concat(EXTRAS.guides || []).filter((g) => /^[a-z0-9-]+$/.test(g.slug || ''));
 for (const t of T) {
   const url = `${ORIGIN}/${t.slug}`;
   const ld = [
@@ -126,14 +143,15 @@ ${ld}
 </head><body data-tool-page="${t.tool}"${t.lang ? ` data-lang="${t.lang}"` : ''}>
 <a class="skip" href="#main">Skip to main content</a>
 <noscript><div class="shell">Luvkaam needs JavaScript to run its tools in your browser. Please turn JavaScript on and reload the page.</div></noscript>
-<header><div class="shell"><nav aria-label="Main"><a href="/" class="brand"><span class="mark"><img src="/luvkaam-icon.png" alt="" width="40" height="40"></span>Luvkaam</a><div class="navlinks"><a href="/#tools">All tools</a><a href="#workspace">Use this tool</a><a href="#faq">FAQ</a></div><div class="navright"><button class="btn primary" id="openRegister" type="button">Register free <span aria-hidden="true">↗</span></button></div></nav></div></header>
+<header><div class="shell"><nav aria-label="Main"><a href="/" class="brand"><span class="mark"><img src="/luvkaam-icon.png" alt="" width="40" height="40"></span>Luvkaam</a><div class="navlinks"><a href="/#tools">All tools</a><a href="/guides">Guides</a><a href="#workspace">Use this tool</a><a href="#faq">FAQ</a></div><div class="navright"><button class="btn primary" id="openRegister" type="button">Register free <span aria-hidden="true">↗</span></button></div></nav></div></header>
 <main id="main"><div id="top"></div>
-<section class="section shell"><nav aria-label="Breadcrumb" style="font-size:13px;margin-bottom:10px"><a class="inl" href="/">Luvkaam</a> › ${esc(t.name)}</nav><h1 style="font-size:clamp(30px,5vw,48px);line-height:1.1;margin:0 0 12px">${esc(t.h1)}</h1><p class="hero-copy">${t.intro}</p><p style="font-size:13px;margin-top:10px"><b>Free after one-time registration.</b> Your files are processed in your browser and never uploaded.</p></section>
+<section class="section shell"><nav aria-label="Breadcrumb" style="font-size:13px;margin-bottom:10px"><a class="inl" href="/">Luvkaam</a> › ${esc(t.name)}</nav><h1 style="font-size:clamp(30px,5vw,48px);line-height:1.1;margin:0 0 12px">${esc(t.h1)}</h1><p class="hero-copy">${t.intro}</p><p style="font-size:13px;margin-top:10px"><b>${FREE_SLUGS.includes(t.slug) ? 'Free. Use it up to 3 times a day without registering.' : 'Free after a quick one-time registration.'}</b> Your files are processed in your browser and never uploaded.</p></section>
 
-<section class="shell workbench" id="workspace" aria-labelledby="wsTitle"><div class="workcopy"><div class="kicker">YOUR WORKSPACE</div><h2 id="wsTitle">${esc(t.name)}</h2><p id="toolBlurb">Add your file and get your result.</p><a href="/#tools" style="font-size:12px;font-weight:800;color:#d6ceff">Browse all tools ↗</a><div class="note">Your files are processed on your device and are not uploaded to Luvkaam. Registration is needed once per browser.</div></div><div class="panel" id="panel"></div></section>
+<section class="shell workbench" id="workspace" aria-labelledby="wsTitle"><div class="workcopy"><div class="kicker">YOUR WORKSPACE</div><h2 id="wsTitle">${esc(t.name)}</h2><p id="toolBlurb">Add your file and get your result.</p><a href="/#tools" style="font-size:12px;font-weight:800;color:#d6ceff">Browse all tools ↗</a><div class="note">Your files are processed on your device and are not uploaded to Luvkaam. ${FREE_SLUGS.includes(t.slug) ? 'You can use this tool 3 times a day without registering. Register free for no limit.' : 'This tool needs a free registration, once per browser.'}</div></div><div class="panel" id="panel"></div></section>
 
 <section class="section shell" id="how"><div class="sectionhead"><div><div class="kicker">Simple by design</div><h2>How to use ${esc(t.name)}</h2></div></div><ol style="line-height:1.8;padding-left:20px">${t.steps.map((s) => `<li>${s}</li>`).join('')}</ol></section>
 
+${(() => { const x = TOOLX[t.slug]; if (!x) return ''; const gd = x.guide ? `<p>Want more detail? Read the guide: <a class="inl" href="/guides/${x.guide}">${esc((ALL_GUIDES.find((g) => g.slug === x.guide) || {}).h1 || 'full guide')}</a>.</p>` : ''; return `<section class="section shell" id="tips"><div class="sectionhead"><div><div class="kicker">Before you start</div><h2>Good to know about ${esc(t.name)}</h2></div></div><div style="line-height:1.75;max-width:760px"><p>${x.about}</p><ul>${(x.tips || []).map((s) => `<li>${s}</li>`).join('')}</ul>${gd}</div></section>`; })()}
 <section class="section shell" id="faq"><div class="sectionhead"><div><div class="kicker">Helpful answers</div><h2>Frequently asked questions</h2></div></div><div class="faq-list">
 ${t.faq.map((f) => `<details><summary>${esc(f[0])}</summary><p>${f[1]}</p></details>`).join('\n')}
 </div></section>
@@ -161,7 +179,7 @@ fs.writeFileSync(path.join(SITE, 'index.html'), home);
 <link rel="stylesheet" href="/assets/site.css">
 </head><body>
 <a class="skip" href="#main">Skip to main content</a>
-<header><div class="shell"><nav aria-label="Main"><a href="/" class="brand"><span class="mark"><img src="/luvkaam-icon.png" alt="" width="40" height="40"></span>Luvkaam</a><div class="navlinks"><a href="/#tools">All tools</a></div><div class="navright"><button class="btn primary" id="openRegister" type="button">Register free <span aria-hidden="true">↗</span></button></div></nav></div></header>
+<header><div class="shell"><nav aria-label="Main"><a href="/" class="brand"><span class="mark"><img src="/luvkaam-icon.png" alt="" width="40" height="40"></span>Luvkaam</a><div class="navlinks"><a href="/#tools">All tools</a><a href="/guides">Guides</a></div><div class="navright"><button class="btn primary" id="openRegister" type="button">Register free <span aria-hidden="true">↗</span></button></div></nav></div></header>
 <main id="main"><article class="section shell legal-page"><div class="kicker">Contact</div><h1>Contact Luvkaam</h1>
 <p>Questions, feedback or a problem with a tool? Write to us and we will reply to the email address you give.</p>
 <p><b>Email:</b> <!--email_off--><a class="inl" href="mailto:hello@luvkaam.com">hello@luvkaam.com</a><!--/email_off--> <button class="btn softbtn" id="copyEmail" type="button" data-email="hello@luvkaam.com">Copy email address</button></p>
@@ -181,7 +199,7 @@ ${footerHtml}${modalAndScripts.replace('</body>', '')}<script src="/assets/conta
 }
 
 // Guide articles
-const guides = (EXTRAS.guides || []).filter((g) => /^[a-z0-9-]+$/.test(g.slug || ''));
+const guides = ALL_GUIDES;
 if (guides.length) fs.mkdirSync(path.join(SITE, 'guides'), { recursive: true });
 for (const g of guides) {
   const url = `${ORIGIN}/guides/${g.slug}`;
@@ -191,7 +209,7 @@ for (const g of guides) {
     { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Luvkaam', item: ORIGIN + '/' }, { '@type': 'ListItem', position: 2, name: g.h1 || g.title, item: url }] },
   ].map((o) => `<script type="application/ld+json">\n${JSON.stringify(o).replace(/</g, '\\u003c')}\n</script>`).join('\n');
   const html = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf7"><link rel="icon" type="image/png" href="/luvkaam-icon.png"><title>${esc(g.title)}</title>
+<html lang="${g.lang || 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf7"><link rel="icon" type="image/png" href="/luvkaam-icon.png"><title>${esc(g.title)}</title>
 <meta name="description" content="${(g.desc || '').replace(/"/g, '&quot;')}">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <link rel="canonical" href="${url}">
@@ -200,9 +218,9 @@ ${ld}
 <link rel="stylesheet" href="/assets/site.css">
 </head><body>
 <a class="skip" href="#main">Skip to main content</a>
-<header><div class="shell"><nav aria-label="Main"><a href="/" class="brand"><span class="mark"><img src="/luvkaam-icon.png" alt="" width="40" height="40"></span>Luvkaam</a><div class="navlinks"><a href="/#tools">All tools</a></div><div class="navright"><button class="btn primary" id="openRegister" type="button">Register free <span aria-hidden="true">↗</span></button></div></nav></div></header>
-<main id="main"><article class="section shell" style="max-width:760px"><nav aria-label="Breadcrumb" style="font-size:13px;margin-bottom:10px"><a class="inl" href="/">Luvkaam</a> › Guides</nav><h1 style="font-size:clamp(28px,5vw,42px);line-height:1.15;margin:0 0 14px">${esc(g.h1 || g.title)}</h1><div style="line-height:1.75">${g.body}</div>
-${rel.length ? `<p style="margin-top:22px"><b>Try it now:</b> ${rel.map((t) => `<a class="inl" href="/${t.slug}">${esc(t.name)}</a>`).join(' · ')}</p>` : ''}</article></main>
+<header><div class="shell"><nav aria-label="Main"><a href="/" class="brand"><span class="mark"><img src="/luvkaam-icon.png" alt="" width="40" height="40"></span>Luvkaam</a><div class="navlinks"><a href="/#tools">All tools</a><a href="/guides">Guides</a></div><div class="navright"><button class="btn primary" id="openRegister" type="button">Register free <span aria-hidden="true">↗</span></button></div></nav></div></header>
+<main id="main"><article class="section shell" style="max-width:760px"><nav aria-label="Breadcrumb" style="font-size:13px;margin-bottom:10px"><a class="inl" href="/">Luvkaam</a> › <a class="inl" href="/guides">Guides</a></nav><h1 style="font-size:clamp(28px,5vw,42px);line-height:1.15;margin:0 0 14px">${esc(g.h1 || g.title)}</h1><div style="line-height:1.75">${g.body}</div>
+${rel.length ? `<p style="margin-top:22px"><b>Try it now:</b> ${rel.map((t) => `<a class="inl" href="/${t.slug}">${esc(t.name)}</a>`).join(' · ')}</p>` : ''}${(() => { const others = guides.filter((o) => o.slug !== g.slug && (o.lang || 'en') === (g.lang || 'en')); const near = others.filter((o) => (o.tools || []).some((x) => (g.tools || []).includes(x))).concat(others).filter((o, k, a) => a.indexOf(o) === k).slice(0, 4); return near.length ? `<aside style="margin-top:26px" aria-label="More guides"><h2 style="font-size:20px">${g.lang === 'hi' ? 'और गाइड' : 'More guides'}</h2><ul>${near.map((o) => `<li><a class="inl" href="/guides/${o.slug}">${esc(o.h1 || o.title)}</a></li>`).join('')}</ul></aside>` : ''; })()}</article></main>
 ${footerHtml}${modalAndScripts}</body></html>
 `;
   fs.writeFileSync(path.join(SITE, 'guides', g.slug + '.html'), html);
@@ -213,7 +231,53 @@ if (guides.length) {
   fs.writeFileSync(path.join(SITE, 'index.html'), home);
 }
 
+// Shared simple page shell (guides index and About)
+function shell(title, desc, canonical, inner) {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf7"><link rel="icon" type="image/png" href="/luvkaam-icon.png"><title>${esc(title)}</title>
+<meta name="description" content="${desc.replace(/"/g, '&quot;')}">
+<meta name="robots" content="index,follow"><link rel="canonical" href="${canonical}">
+<meta property="og:type" content="website"><meta property="og:url" content="${canonical}"><meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${desc.replace(/"/g, '&quot;')}"><meta property="og:site_name" content="Luvkaam"><meta property="og:image" content="${ORIGIN}/luvkaam-logo.png"><meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="/assets/site.css">
+</head><body>
+<a class="skip" href="#main">Skip to main content</a>
+<header><div class="shell"><nav aria-label="Main"><a href="/" class="brand"><span class="mark"><img src="/luvkaam-icon.png" alt="" width="40" height="40"></span>Luvkaam</a><div class="navlinks"><a href="/#tools">All tools</a><a href="/guides">Guides</a></div><div class="navright"><button class="btn primary" id="openRegister" type="button">Register free <span aria-hidden="true">↗</span></button></div></nav></div></header>
+<main id="main">${inner}</main>
+${footerHtml}${modalAndScripts}</body></html>
+`;
+}
+
+// Guides index
+{
+  const en = guides.filter((g) => (g.lang || 'en') === 'en'), other = guides.filter((g) => (g.lang || 'en') !== 'en');
+  const item = (g) => `<li style="margin-bottom:12px"><a class="inl" href="/guides/${g.slug}"><b>${esc(g.h1 || g.title)}</b></a><br><span style="font-size:14px">${esc(g.desc || '')}</span></li>`;
+  fs.writeFileSync(path.join(SITE, 'guides.html'), shell('Guides: How to Work With PDFs and Photos | Luvkaam', 'Plain how-to guides for merging, compressing, converting, signing and reading PDFs and images, including Hindi text from photos.', ORIGIN + '/guides',
+    `<section class="section shell" style="max-width:820px"><nav aria-label="Breadcrumb" style="font-size:13px;margin-bottom:10px"><a class="inl" href="/">Luvkaam</a> › Guides</nav><h1 style="font-size:clamp(28px,5vw,42px);line-height:1.15;margin:0 0 12px">Guides</h1><p>Short, plain how-to guides for everyday PDF and photo jobs. Each one explains the steps, what can go wrong, and how to fix it.</p><ul style="list-style:none;padding:0;margin-top:20px">${en.map(item).join('')}</ul>${other.length ? `<h2 style="margin-top:26px">हिंदी में</h2><ul style="list-style:none;padding:0">${other.map(item).join('')}</ul>` : ''}</section>`));
+}
+
+// About
+fs.writeFileSync(path.join(SITE, 'about.html'), shell('About Luvkaam | Free PDF and Photo Tools', 'Luvkaam is a set of free PDF and photo tools that work in your browser, built in Gurgaon, India. Your files stay on your device.', ORIGIN + '/about',
+  `<article class="section shell legal-page" style="max-width:760px"><nav aria-label="Breadcrumb" style="font-size:13px;margin-bottom:10px"><a class="inl" href="/">Luvkaam</a> › About</nav><h1>About Luvkaam</h1>
+<p>Luvkaam is a set of free tools for everyday PDF and photo jobs. You can merge, split, rotate, compress, sign, lock and unlock PDFs. You can turn photos into PDFs, convert image formats, and pull text out of images and scans. That includes Hindi.</p>
+<h2>Why we made it</h2>
+<p>Most free PDF sites ask you to upload your file to their server. For a college form that is fine. For a bank statement or an ID card, many people are not comfortable with it. So we built tools that run inside your own browser. Your file stays on your phone or laptop while you work on it.</p>
+<h2>What it can and cannot do</h2>
+<ul>
+<li>It works best on normal documents and clear photos.</li>
+<li>PDF to Word keeps the text, not the design.</li>
+<li>PDF to Excel is a best guess for simple tables.</li>
+<li>Reading text from images is good on clear printed pages and weak on handwriting.</li>
+<li>The signature tool adds a picture of your signature. It is not a certificate-based digital signature.</li>
+</ul>
+<p>We say this plainly on each tool page too, so you know what to expect before you start.</p>
+<h2>What it costs</h2>
+<p>The tools are free. Merge, Compress, JPG to PDF and Image to text can be used three times a day without an account. A free registration removes that limit and opens all 16 tools. We may show ads on the site in future to pay for it. If you register and agree to it, we may also send you offers. You can say no, and you can withdraw at any time.</p>
+<h2>Who runs it</h2>
+<p>Luvkaam is run from Gurgaon, Haryana, India. You can write to us from the <a class="inl" href="/contact">Contact page</a> or at <!--email_off--><a class="inl" href="mailto:hello@luvkaam.com">hello@luvkaam.com</a><!--/email_off-->. Our <a class="inl" href="/privacy">Privacy Policy</a> and <a class="inl" href="/terms">Terms of Use</a> explain what we collect and the rules for using the site.</p>
+<h2>Tell us what is missing</h2>
+<p>If a tool fails on your file, or you need one we do not have, tell us. Real problems from real files are how the tools get better.</p></article>`));
+
 // Sitemap
-const urls = [['', 'daily'], ...T.map((t) => [t.slug, 'weekly']), ...guides.map((g) => ['guides/' + g.slug, 'monthly']), ['contact', 'yearly'], ['privacy', 'yearly'], ['terms', 'yearly']];
+const urls = [['', 'daily'], ...T.map((t) => [t.slug, 'weekly']), ['guides', 'weekly'], ...guides.map((g) => ['guides/' + g.slug, 'monthly']), ['about', 'yearly'], ['contact', 'yearly'], ['privacy', 'yearly'], ['terms', 'yearly']];
 fs.writeFileSync(path.join(SITE, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${ORIGIN}/${u[0]}</loc><lastmod>${TODAY}</lastmod></url>`).join('\n')}\n</urlset>\n`);
 console.log('pages:', T.length);

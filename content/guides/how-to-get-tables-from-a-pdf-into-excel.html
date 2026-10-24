@@ -1,0 +1,31 @@
+title: How to Get Tables From a PDF Into Excel
+h1: How to get tables from a PDF into Excel
+desc: Move simple tables from a PDF into an Excel or CSV file. What works, what does not, and how to check the result.
+tools: pdf-to-excel, pdf-to-text
+
+<p>Bank statements, price lists and result sheets often arrive as PDFs. Typing the numbers into Excel is slow and easy to get wrong. This tool reads the rows of a PDF table and gives you a spreadsheet.</p>
+<h2>Steps</h2>
+<ol>
+<li>Open <a class="inl" href="/pdf-to-excel">PDF to Excel</a>.</li>
+<li>Choose a PDF with a table in it. It must contain real text, not a scan.</li>
+<li>Choose the layout: <b>one sheet per page</b> or <b>all pages on one sheet</b>.</li>
+<li>Press <b>Extract tables</b>.</li>
+<li>Download the .xlsx file for Excel, or the .csv file for any spreadsheet app.</li>
+</ol>
+<p>The PDF is read on your device and is not uploaded.</p>
+<h2>Which layout should you pick?</h2>
+<p>Use <b>one sheet per page</b> when each page stands on its own, like separate months of a statement. Use <b>all pages on one sheet</b> when it is one long table that happens to continue across pages. Then you can sort and filter it as one list.</p>
+<h2>This is a best guess</h2>
+<p>A PDF does not store a table the way Excel does. It only knows where each word sits on the page. The tool looks at that spacing to guess the rows and columns. Simple grids work well. These can go wrong:</p>
+<ul>
+<li>Cells that span several columns or rows.</li>
+<li>Tables with no clear gaps between columns.</li>
+<li>Text that wraps onto a second line inside a cell.</li>
+<li>Pages with several small tables, or a table next to a paragraph.</li>
+</ul>
+<h2>Check before you use the numbers</h2>
+<p>Always do three quick checks. Do the totals still match the PDF? Is any column shifted so that a number sits under the wrong heading? Are dates and amounts still readable as dates and amounts? Money matters deserve this minute.</p>
+<h2>If nothing is found</h2>
+<p>You will see a message that no selectable text was found. The PDF is a scan. Run <a class="inl" href="/ocr-scanned-pdf">OCR scanned PDF</a>, then retype or paste the figures into your sheet. Scanned tables are hard for any tool, so expect to fix some by hand.</p>
+<h2>A small trick</h2>
+<p>If a table comes out messy, extract the plain text with <a class="inl" href="/pdf-to-text">PDF to text</a>. Sometimes the text version is easier to paste in and split into columns using Excel's "Text to Columns".</p>

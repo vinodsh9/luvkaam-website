@@ -132,3 +132,6 @@ footer .footlinks a{padding:2px 0}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}.btn:hover,.tool:hover{transform:none}}
 .modal form label.checkrow{display:flex;align-items:flex-start;gap:10px;margin:0;font-weight:600;font-size:12px}
 .modal form label.checkrow input[type=checkbox]{width:20px;height:20px;padding:0;margin-top:1px;flex:none}
+
+.wk-free{margin:10px 0;padding:10px 12px;border-radius:10px;background:#f3f0ff;color:#3b2f7a;font-size:13px;line-height:1.5}
+.wk-free[hidden]{display:none}
