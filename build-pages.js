@@ -151,6 +151,35 @@ const block = `<!--toolpages--><section class="section shell" id="tool-pages"><d
 home = home.replace('<section class="section shell" id="more-tools">', block + '<section class="section shell" id="more-tools">');
 fs.writeFileSync(path.join(SITE, 'index.html'), home);
 
+// Contact page
+{
+  const url = ORIGIN + '/contact';
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf7"><link rel="icon" type="image/png" href="/luvkaam-icon.png"><title>Contact Luvkaam</title>
+<meta name="description" content="Contact Luvkaam: send a message or email hello@luvkaam.com. For privacy requests use the Privacy page.">
+<meta name="robots" content="index,follow"><link rel="canonical" href="${url}">
+<link rel="stylesheet" href="/assets/site.css">
+</head><body>
+<a class="skip" href="#main">Skip to main content</a>
+<header><div class="shell"><nav aria-label="Main"><a href="/" class="brand"><span class="mark"><img src="/luvkaam-icon.png" alt="" width="40" height="40"></span>Luvkaam</a><div class="navlinks"><a href="/#tools">All tools</a></div><div class="navright"><button class="btn primary" id="openRegister" type="button">Register free <span aria-hidden="true">↗</span></button></div></nav></div></header>
+<main id="main"><article class="section shell legal-page"><div class="kicker">Contact</div><h1>Contact Luvkaam</h1>
+<p>Questions, feedback or a problem with a tool? Write to us and we will reply to the email address you give.</p>
+<p><b>Email:</b> <!--email_off--><a class="inl" href="mailto:hello@luvkaam.com">hello@luvkaam.com</a><!--/email_off--> <button class="btn softbtn" id="copyEmail" type="button" data-email="hello@luvkaam.com">Copy email address</button></p>
+<h2>Or send a message here</h2>
+<form class="legal-form" id="contactForm" novalidate>
+<div><label for="cEmail">Your email address</label><input id="cEmail" name="email" type="email" required autocomplete="email" maxlength="254"></div>
+<div><label for="cMsg">Your message</label><textarea id="cMsg" name="message" required rows="5" maxlength="1500"></textarea></div>
+<div class="hp" aria-hidden="true"><label for="cWebsite">Leave this field empty</label><input id="cWebsite" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+<button class="btn primary" type="submit">Send message</button>
+<div class="msg" role="status" hidden></div>
+</form>
+<p style="margin-top:18px">To access, correct or erase your data, or to stop promotional messages, use the <a class="inl" href="/privacy#rights">Privacy page</a>.</p>
+</article></main>
+${footerHtml}${modalAndScripts.replace('</body>', '')}<script src="/assets/contact.js"></script></body></html>
+`;
+  fs.writeFileSync(path.join(SITE, 'contact.html'), html);
+}
+
 // Guide articles
 const guides = (EXTRAS.guides || []).filter((g) => /^[a-z0-9-]+$/.test(g.slug || ''));
 if (guides.length) fs.mkdirSync(path.join(SITE, 'guides'), { recursive: true });
@@ -185,6 +214,6 @@ if (guides.length) {
 }
 
 // Sitemap
-const urls = [['', 'daily'], ...T.map((t) => [t.slug, 'weekly']), ...guides.map((g) => ['guides/' + g.slug, 'monthly']), ['privacy', 'yearly'], ['terms', 'yearly']];
+const urls = [['', 'daily'], ...T.map((t) => [t.slug, 'weekly']), ...guides.map((g) => ['guides/' + g.slug, 'monthly']), ['contact', 'yearly'], ['privacy', 'yearly'], ['terms', 'yearly']];
 fs.writeFileSync(path.join(SITE, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${ORIGIN}/${u[0]}</loc><lastmod>${TODAY}</lastmod></url>`).join('\n')}\n</urlset>\n`);
 console.log('pages:', T.length);

@@ -189,7 +189,7 @@ async function optout(request, env) {
 }
 
 /* ---------- POST /api/request ---------- */
-const REQUEST_TYPES = ['access', 'correction', 'erasure', 'grievance'];
+const REQUEST_TYPES = ['access', 'correction', 'erasure', 'grievance', 'contact'];
 async function privacyRequest(request, env) {
   const early = preflight(request, env); if (early) return early;
   let body;
