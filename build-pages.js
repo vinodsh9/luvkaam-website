@@ -281,3 +281,18 @@ fs.writeFileSync(path.join(SITE, 'about.html'), shell('About Luvkaam | Free PDF 
 const urls = [['', 'daily'], ...T.map((t) => [t.slug, 'weekly']), ['guides', 'weekly'], ...guides.map((g) => ['guides/' + g.slug, 'monthly']), ['about', 'yearly'], ['contact', 'yearly'], ['privacy', 'yearly'], ['terms', 'yearly']];
 fs.writeFileSync(path.join(SITE, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${ORIGIN}/${u[0]}</loc><lastmod>${TODAY}</lastmod></url>`).join('\n')}\n</urlset>\n`);
 console.log('pages:', T.length);
+
+
+// Make every page installable as an app (manifest + service worker). Safe to run many times.
+{
+  const inject = (file) => {
+    let s = fs.readFileSync(file, 'utf8');
+    if (s.includes('rel="manifest"')) return;
+    s = s.replace('</head>', '<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/assets/icon-192.png">\n</head>');
+    if (!s.includes('pwa.js')) s = s.replace('</body>', '<script src="/assets/pwa.js" defer></script>\n</body>');
+    fs.writeFileSync(file, s);
+  };
+  for (const f of fs.readdirSync(SITE)) if (f.endsWith('.html') && f !== 'offline.html') inject(path.join(SITE, f));
+  const gd = path.join(SITE, 'guides');
+  if (fs.existsSync(gd)) for (const f of fs.readdirSync(gd)) if (f.endsWith('.html')) inject(path.join(gd, f));
+}

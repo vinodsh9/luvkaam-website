@@ -1,0 +1,53 @@
+{
+ "name": "Luvkaam – Free PDF and Photo Tools",
+ "short_name": "Luvkaam",
+ "description": "Free PDF and photo tools that work in your browser. Files stay on your device.",
+ "start_url": "/?source=app",
+ "scope": "/",
+ "display": "standalone",
+ "background_color": "#fffaf7",
+ "theme_color": "#fffaf7",
+ "lang": "en-IN",
+ "categories": [
+  "productivity",
+  "utilities"
+ ],
+ "icons": [
+  {
+   "src": "/assets/icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "/assets/icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "/assets/icon-maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ],
+ "shortcuts": [
+  {
+   "name": "Merge PDF",
+   "url": "/merge-pdf"
+  },
+  {
+   "name": "Compress PDF",
+   "url": "/compress-pdf"
+  },
+  {
+   "name": "JPG to PDF",
+   "url": "/jpg-to-pdf"
+  },
+  {
+   "name": "Image to text",
+   "url": "/image-to-text"
+  }
+ ]
+}
